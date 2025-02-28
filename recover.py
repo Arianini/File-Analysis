@@ -5,14 +5,12 @@ import zipfile
 from datetime import datetime
 import pefile 
 
-# Define paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-FILE_DIRECTORY = os.path.join(SCRIPT_DIR, "File")  # Directory with corrupt/incomplete files
-RECOVERED_ROOT_DIR = os.path.join(SCRIPT_DIR, "RecoveredFiles")  # Root recovery folder
+FILE_DIRECTORY = os.path.join(SCRIPT_DIR, "File")  
+RECOVERED_ROOT_DIR = os.path.join(SCRIPT_DIR, "RecoveredFiles")  
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
-RECOVERED_DIRECTORY = os.path.join(RECOVERED_ROOT_DIR, f"Recovery_{TIMESTAMP}")  # Timestamped recovery session
+RECOVERED_DIRECTORY = os.path.join(RECOVERED_ROOT_DIR, f"Recovery_{TIMESTAMP}")  
 
-# Ensure recovery folder exists
 os.makedirs(RECOVERED_DIRECTORY, exist_ok=True)
 
 # Magic Numbers for File Recovery
@@ -76,12 +74,12 @@ def compute_sha256(file_path):
 def get_magic_number(file_path):
     """Retrieve the magic number (hex), offset, and ASCII representation."""
     with open(file_path, "rb") as f:
-        magic_bytes = f.read(8)  # Read first 8 bytes
+        magic_bytes = f.read(8)  
 
     magic_hex = " ".join(f"{byte:02X}" for byte in magic_bytes)
     magic_ascii = "".join(chr(byte) if 32 <= byte <= 126 else "." for byte in magic_bytes)
     
-    return magic_hex, "0x0", magic_ascii  # Magic number, Offset (always 0x0), ASCII Representation
+    return magic_hex, "0x0", magic_ascii 
 
 
 def check_zip_contents(file_path):
@@ -100,37 +98,30 @@ def check_zip_contents(file_path):
             elif any(f.lower().endswith(('.py', '.sh', '.bat', '.pl')) for f in file_list):
                 return "script_archive"
     except zipfile.BadZipFile:
-        return None  # Indicate that the ZIP file is corrupted
+        return None 
     return "zip"
 
 def is_text_file(file_path, block_size=512):
-    """
-    Determine if a file is a text file by attempting to decode its content.
-    """
     try:
         with open(file_path, 'rb') as file:
             chunk = file.read(block_size)
             if not chunk:
-                return False  # Empty files are considered non-text
-            # Try decoding with common encodings
+                return False 
             for encoding in ['utf-8', 'utf-16', 'utf-32', 'latin-1']:
                 try:
                     chunk.decode(encoding)
-                    return True  # Decoding successful, likely a text file
+                    return True  
                 except UnicodeDecodeError:
                     continue
     except Exception as e:
         print(f"Error reading file {file_path}: {e}")
-    return False  # If all decoding attempts fail, it's likely binary
+    return False
 
 def is_pe_file(file_path):
-    """Determine if a file is a PE (Portable Executable) and distinguish between EXE and DLL."""
     try:
         with open(file_path, "rb") as f:
-            # Read the first 64 bytes (to include the DOS header)
             dos_header = f.read(64)
 
-            # Ensure file starts with 'MZ' (DOS header)
             if not dos_header.startswith(b'MZ'):
                 return None  # Not a valid PE file
 
@@ -143,23 +134,22 @@ def is_pe_file(file_path):
 
             # Check for valid "PE\0\0" signature
             if pe_header != b"PE\0\0":
-                return None  # Not a valid PE file
+                return None 
 
         # Use pefile for further classification
         pe = pefile.PE(file_path)
-        if pe.FILE_HEADER.Characteristics & 0x2000:  # IMAGE_FILE_DLL
+        if pe.FILE_HEADER.Characteristics & 0x2000:  
             return "dll"
         else:
-            return "exe"  # Default to EXE if not a DLL
+            return "exe"  
 
     except pefile.PEFormatError:
-        return None  # Not a valid PE file
+        return None  
     except Exception as e:
         print(f"[ERROR] Unable to read PE file {file_path}: {e}")
         return None
 
 def is_batch_file(file_path):
-    """Check if the file is a Windows Batch script based on its contents."""
     try:
         with open(file_path, "r", errors="ignore") as f:
             first_lines = f.readlines()[:5]  # Read first few lines
@@ -171,7 +161,6 @@ def is_batch_file(file_path):
     return False
 
 def is_powershell_file(file_path):
-    """Check if a file is a PowerShell script by analyzing its content."""
     try:
         with open(file_path, "r", errors="ignore") as f:
             first_few_lines = [f.readline().strip().lower() for _ in range(6)]
@@ -187,13 +176,9 @@ def is_powershell_file(file_path):
 
     except Exception:
         pass
-    return False  # Default to False if the file can't be read
+    return False 
 
 def manual_recover_files():
-    """
-    Manually recover files by scanning for known magic numbers and content analysis.
-    If a file does not match a known signature, it is analyzed for text or binary content.
-    """
     recovered_files = []
 
     if not os.path.exists(FILE_DIRECTORY):
@@ -201,12 +186,12 @@ def manual_recover_files():
         return recovered_files
 
     for root, _, files in os.walk(FILE_DIRECTORY):
-        for file in sorted(files):  # Ensure sequential order
+        for file in sorted(files): 
             file_path = os.path.join(root, file)
             recovered = False
 
             with open(file_path, "rb") as f:
-                header = f.read(8)  # Read first 8 bytes for magic number detection
+                header = f.read(8)
 
             # === PRIORITY CHECK FOR KNOWN MAGIC NUMBERS ===
             ext = None
@@ -219,14 +204,14 @@ def manual_recover_files():
             if ext == "zip":
                 zip_type = check_zip_contents(file_path)
                 if zip_type:
-                    ext = zip_type  # Update extension if specific Office format is detected
+                    ext = zip_type  
 
             # === CHECK IF FILE IS A PE EXECUTABLE (EXE/DLL) ===
             elif ext == "exe":
                 try:
                     pe_type = is_pe_file(file_path)
                     if pe_type:
-                        ext = pe_type  # Update to "exe" or "dll"
+                        ext = pe_type 
                     else:
                         ext = "unknown"
                 except Exception:
@@ -250,7 +235,7 @@ def manual_recover_files():
                         elif 'python' in first_line:
                             ext = 'py'
                         else:
-                            ext = 'script'  # Generic script file
+                            ext = 'script' 
                     else:
                         ext = 'txt'
 
